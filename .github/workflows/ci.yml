@@ -97,6 +97,7 @@ jobs:
 
   windows:
     runs-on: windows-2022
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -116,7 +117,14 @@ jobs:
           -DTALON_STATUS_BUILD_BENCHMARKS=ON
           -DTALON_STATUS_STRICT_WARNINGS=ON
       - run: cmake --build build --config ${{ matrix.config }} --parallel 2
-      - run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure --parallel 2
+      - name: Run Debug runtime tests
+        if: matrix.config == 'Debug'
+        run: >-
+          ctest --test-dir build -C Debug --output-on-failure --parallel 2
+          -R '^talon\.(status|status_or|macros|allocation|call_chain|macros_line|call_chain_line|multitu|example|benchmark_smoke)$'
+      - name: Run complete Release test matrix
+        if: matrix.config != 'Debug'
+        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure --parallel 2
 
   sanitizers:
     runs-on: ubuntu-24.04
