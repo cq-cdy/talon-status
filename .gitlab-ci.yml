@@ -66,21 +66,26 @@ sanitizers:
   image: ubuntu:24.04
   parallel:
     matrix:
-      - TALON_BACKEND: [COMPAT, STD]
-  variables:
-    ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
-    UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+      - TALON_BACKEND: COMPAT
+        TALON_COMPILER: clang++-18
+        TALON_UAR: "1"
+      - TALON_BACKEND: STD
+        TALON_COMPILER: g++-14
+        TALON_UAR: "0"
   before_script:
     - apt-get update
-    - apt-get install -y cmake ninja-build clang-18 libc++-18-dev libc++abi-18-dev
+    - apt-get install -y cmake ninja-build clang-18 g++-14
   script:
     - >-
       cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
-      -DCMAKE_CXX_COMPILER=clang++-18
+      -DCMAKE_CXX_COMPILER="$TALON_COMPILER"
       -DTALON_STATUS_CXX_STANDARD=23 -DTALON_STATUS_BACKEND="$TALON_BACKEND"
       -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_SANITIZERS=ON
     - cmake --build build --parallel 2
-    - ctest --test-dir build --output-on-failure --parallel 2
+    - >-
+      ASAN_OPTIONS="detect_leaks=1:detect_stack_use_after_return=$TALON_UAR"
+      UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
+      ctest --test-dir build --output-on-failure --parallel 2
 
 abseil:
   stage: test

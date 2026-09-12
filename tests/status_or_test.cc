@@ -286,6 +286,12 @@ void CompareStandardTraits() {
 }
 #endif
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+// Instantiating the compatibility union with the deliberately over-aligned
+// test value triggers C4324 by design; the runtime assertion verifies it.
+#pragma warning(disable : 4324)
+#endif
 void TestBasicsAndAccess() {
   StatusOr<NoDefault> empty;
   CHECK(!empty.ok());
@@ -373,6 +379,9 @@ void TestBasicsAndAccess() {
   CHECK_EQ(bad.status().code(), error.code());
   CHECK(bad.status().message().empty());
 }
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 void TestStateTransitions() {
   CHECK_EQ(Tracked::live, 0);

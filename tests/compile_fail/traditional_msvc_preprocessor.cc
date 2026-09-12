@@ -1,4 +1,5 @@
 // EXPECT: Talon status macros require the conforming MSVC preprocessor
+// TRADITIONAL_MSVC
 #ifndef _MSC_VER
 #define _MSC_VER 1930
 #endif

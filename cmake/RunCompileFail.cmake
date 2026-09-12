@@ -15,6 +15,8 @@ if(backend)
   string(REGEX REPLACE "^// BACKEND: " "" TALON_BACKEND_VALUE "${backend}")
 endif()
 file(STRINGS "${TALON_TEST_SOURCE}" no_exceptions REGEX "^// NO_EXCEPTIONS" LIMIT_COUNT 1)
+file(STRINGS "${TALON_TEST_SOURCE}" traditional_msvc
+  REGEX "^// TRADITIONAL_MSVC" LIMIT_COUNT 1)
 get_filename_component(test_name "${TALON_TEST_SOURCE}" NAME_WE)
 set(test_build "${TALON_BUILD_DIR}/compile-fail/${test_name}")
 talon_require_success("Configure ${test_name}"
@@ -23,7 +25,8 @@ talon_require_success("Configure ${test_name}"
   "-DTALON_INCLUDE_DIR=${TALON_SOURCE_DIR}/include"
   "-DTALON_TEST_SOURCE=${TALON_TEST_SOURCE}"
   "-DTALON_BACKEND_VALUE=${TALON_BACKEND_VALUE}"
-  "-DTALON_NO_EXCEPTIONS=${no_exceptions}")
+  "-DTALON_NO_EXCEPTIONS=${no_exceptions}"
+  "-DTALON_TRADITIONAL_MSVC=${traditional_msvc}")
 talon_require_success("Compiler baseline for ${test_name}"
   "${CMAKE_COMMAND}" --build "${test_build}" ${talon_nested_build_args} --target baseline)
 execute_process(COMMAND "${CMAKE_COMMAND}" --build "${test_build}"

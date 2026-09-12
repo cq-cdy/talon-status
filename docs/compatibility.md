@@ -27,7 +27,7 @@ CMake 的 `TALON_STATUS_CXX_STANDARD` 控制本项目测试/示例，允许 11/1
 | TALON_STATUS_SANITIZERS | OFF | GCC/Clang 测试目标 ASan+UBSan，不传播消费端 |
 | TALON_STATUS_COVERAGE | OFF | GCC/gcov 测试插桩，不传播消费端 |
 
-分配失败注入测试替换全局 new/delete，必须与 ASan 的分配器拦截分开：sanitizer 配置下该测试仍完整运行，但不加 ASan/UBSan；其他生命周期测试照常插桩。覆盖率仍包含分配失败测试。Clang12 使用实测支持的 LLVM 选项开启返回后栈检测插桩。GCC12/libasan.so.8 的 fake-stack 会破坏 128 字节超对齐对象的对齐，仓库在 `tests/toolchain/gcc12_asan_alignment.cc` 保留了不依赖 Talon 的最小复现；CI sanitizer 因此使用 Clang。
+分配失败注入测试替换全局 new/delete，必须与 ASan 的分配器拦截分开：sanitizer 配置下该测试仍完整运行，但不加 ASan/UBSan；其他生命周期测试照常插桩。覆盖率仍包含分配失败测试。Clang12 使用实测支持的 LLVM 选项开启返回后栈检测插桩。GCC12/libasan.so.8 的 fake-stack 会破坏 128 字节超对齐对象的对齐，仓库在 `tests/toolchain/gcc12_asan_alignment.cc` 保留了不依赖 Talon 的最小复现。CI 由 Clang 对 COMPAT 后端执行 UAR 检查，由 GCC 对 STD 后端执行其余 ASan/UBSan 检查并关闭 GCC 的 UAR 路径。
 
 `TALON_STATUS_USE_LINE_COUNTER` 是预处理器宏，不是 CMake 缓存选项。需要时使用 `target_compile_definitions(app PRIVATE TALON_STATUS_USE_LINE_COUNTER=1)`，相关 TU 都保持一致。
 
