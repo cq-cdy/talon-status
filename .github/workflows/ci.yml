@@ -121,7 +121,7 @@ jobs:
         if: matrix.config == 'Debug'
         run: >-
           ctest --test-dir build -C Debug --output-on-failure --parallel 2
-          -R '^talon\.(status|status_or|macros|allocation|macros_line|multitu|example|benchmark_smoke)$'
+          -R '^talon\.(status_or|macros|allocation|macros_line|multitu|example|benchmark_smoke)$'
       - name: Run complete Release test matrix
         if: matrix.config != 'Debug'
         run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure --parallel 2
