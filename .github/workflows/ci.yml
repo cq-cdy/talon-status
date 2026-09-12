@@ -1,0 +1,195 @@
+name: C++ contracts
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gcc:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 11, backend: COMPAT, config: Debug}
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 14, backend: COMPAT, config: Release}
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 17, backend: COMPAT, config: Debug}
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 20, backend: COMPAT, config: Release}
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 23, backend: COMPAT, config: Release}
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 23, backend: AUTO, config: Debug}
+          - {os: ubuntu-22.04, compiler: g++-12, standard: 23, backend: STD, config: Debug}
+          - {os: ubuntu-24.04, compiler: g++-14, standard: 23, backend: STD, config: Release}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install selected compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.compiler }} ninja-build
+          ${{ matrix.compiler }} --version
+          cmake --version
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.config }}
+          -DTALON_STATUS_CXX_STANDARD=${{ matrix.standard }}
+          -DTALON_STATUS_BACKEND=${{ matrix.backend }}
+          -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+          -DTALON_STATUS_BUILD_BENCHMARKS=ON
+          -DTALON_STATUS_STRICT_WARNINGS=ON
+          -DCMAKE_DISABLE_FIND_PACKAGE_absl=TRUE
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --parallel 2
+
+  clang:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {standard: 11, backend: COMPAT}
+          - {standard: 23, backend: AUTO}
+          - {standard: 23, backend: STD}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev ninja-build
+          clang++-18 --version
+      - run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18
+          -DCMAKE_CXX_FLAGS=-stdlib=libc++ -DCMAKE_BUILD_TYPE=Debug
+          -DTALON_STATUS_CXX_STANDARD=${{ matrix.standard }}
+          -DTALON_STATUS_BACKEND=${{ matrix.backend }}
+          -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+          -DTALON_STATUS_BUILD_BENCHMARKS=ON
+          -DTALON_STATUS_STRICT_WARNINGS=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --parallel 2
+
+  macos:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {standard: 11, backend: COMPAT}
+          - {standard: 23, backend: STD}
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcrun clang++ --version
+      - run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_BUILD_TYPE=Release
+          -DTALON_STATUS_CXX_STANDARD=${{ matrix.standard }}
+          -DTALON_STATUS_BACKEND=${{ matrix.backend }}
+          -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+          -DTALON_STATUS_BUILD_BENCHMARKS=ON
+          -DTALON_STATUS_STRICT_WARNINGS=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --parallel 2
+
+  windows:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {standard: 17, backend: COMPAT, config: Debug}
+          - {standard: 23, backend: AUTO, config: Release}
+          - {standard: 23, backend: STD, config: Release}
+    steps:
+      - uses: actions/checkout@v4
+      # VS 2022 supports /std:c++17 and /std:c++latest. CMake chooses the
+      # actual C++23 switch; this does not claim an MSVC C++11 mode exists.
+      - run: >-
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+          -DTALON_STATUS_CXX_STANDARD=${{ matrix.standard }}
+          -DTALON_STATUS_BACKEND=${{ matrix.backend }}
+          -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+          -DTALON_STATUS_BUILD_BENCHMARKS=ON
+          -DTALON_STATUS_STRICT_WARNINGS=ON
+      - run: cmake --build build --config ${{ matrix.config }} --parallel 2
+      - run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure --parallel 2
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [COMPAT, STD]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev ninja-build
+      - run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18
+          -DCMAKE_CXX_FLAGS=-stdlib=libc++
+          -DCMAKE_BUILD_TYPE=Debug -DTALON_STATUS_CXX_STANDARD=23
+          -DTALON_STATUS_BACKEND=${{ matrix.backend }}
+          -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_SANITIZERS=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --parallel 2
+        env:
+          ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+  coverage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-12 gcovr ninja-build
+      - run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=g++-12
+          -DCMAKE_BUILD_TYPE=Debug -DTALON_STATUS_CXX_STANDARD=11
+          -DTALON_STATUS_BACKEND=COMPAT -DTALON_STATUS_BUILD_TESTS=ON
+          -DTALON_STATUS_COVERAGE=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --parallel 2
+      - name: Produce header coverage
+        run: |
+          mkdir -p coverage
+          gcovr --gcov-executable gcov-12 --root . --filter include/talon/ --exclude-unreachable-branches --print-summary --html-details coverage/index.html --xml coverage/coverage.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gcc12-compat-coverage
+          path: coverage/
+
+  abseil:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {standard: 17, backend: COMPAT}
+          - {standard: 23, backend: STD}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-12 ninja-build
+      - name: Build real Abseil 20250127.1 explicitly
+        run: |
+          git clone --depth 1 --branch 20250127.1 https://github.com/abseil/abseil-cpp.git external/abseil-cpp
+          cmake -S external/abseil-cpp -B external/abseil-build -G Ninja -DCMAKE_CXX_COMPILER=g++-12 -DCMAKE_CXX_STANDARD=${{ matrix.standard }} -DCMAKE_BUILD_TYPE=Release -DABSL_BUILD_TESTING=OFF -DABSL_ENABLE_INSTALL=ON -DABSL_PROPAGATE_CXX_STD=ON -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/external/abseil-install"
+          cmake --build external/abseil-build --parallel 2
+          cmake --install external/abseil-build
+      - run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=g++-12
+          -DCMAKE_PREFIX_PATH="${{ github.workspace }}/external/abseil-install"
+          -DCMAKE_BUILD_TYPE=Debug
+          -DTALON_STATUS_CXX_STANDARD=${{ matrix.standard }}
+          -DTALON_STATUS_BACKEND=${{ matrix.backend }}
+          -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_WITH_ABSL=ON
+          -DTALON_STATUS_ABSL_TESTS=ON -DTALON_STATUS_STRICT_WARNINGS=ON
+      - run: cmake --build build --parallel 2
+      - run: ctest --test-dir build --output-on-failure --parallel 2

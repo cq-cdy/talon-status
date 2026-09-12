@@ -1,0 +1,157 @@
+stages: [test]
+
+.linux-test:
+  stage: test
+  before_script:
+    - apt-get update
+    - apt-get install -y cmake ninja-build
+    - g++ --version
+    - cmake --version
+  script:
+    - >-
+      cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      -DTALON_STATUS_CXX_STANDARD="$TALON_CXX_STANDARD"
+      -DTALON_STATUS_BACKEND="$TALON_BACKEND"
+      -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+      -DTALON_STATUS_BUILD_BENCHMARKS=ON
+      -DTALON_STATUS_STRICT_WARNINGS=ON
+      -DCMAKE_DISABLE_FIND_PACKAGE_absl=TRUE
+    - cmake --build build --parallel 2
+    - ctest --test-dir build --output-on-failure --parallel 2
+
+gcc12:
+  extends: .linux-test
+  image: gcc:12
+  parallel:
+    matrix:
+      - TALON_CXX_STANDARD: ["11", "14", "17", "20", "23"]
+        TALON_BACKEND: [COMPAT]
+      - TALON_CXX_STANDARD: ["23"]
+        TALON_BACKEND: [AUTO, STD]
+
+gcc14:
+  extends: .linux-test
+  image: gcc:14
+  variables:
+    TALON_CXX_STANDARD: "23"
+    TALON_BACKEND: STD
+
+clang18:
+  stage: test
+  image: ubuntu:24.04
+  parallel:
+    matrix:
+      - TALON_CXX_STANDARD: ["11"]
+        TALON_BACKEND: [COMPAT]
+      - TALON_CXX_STANDARD: ["23"]
+        TALON_BACKEND: [AUTO, STD]
+  before_script:
+    - apt-get update
+    - apt-get install -y cmake ninja-build clang-18 libc++-18-dev libc++abi-18-dev
+    - clang++-18 --version
+  script:
+    - >-
+      cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18
+      -DCMAKE_CXX_FLAGS=-stdlib=libc++ -DCMAKE_BUILD_TYPE=Release
+      -DTALON_STATUS_CXX_STANDARD="$TALON_CXX_STANDARD"
+      -DTALON_STATUS_BACKEND="$TALON_BACKEND"
+      -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+      -DTALON_STATUS_BUILD_BENCHMARKS=ON
+      -DTALON_STATUS_STRICT_WARNINGS=ON
+    - cmake --build build --parallel 2
+    - ctest --test-dir build --output-on-failure --parallel 2
+
+sanitizers:
+  stage: test
+  image: ubuntu:24.04
+  parallel:
+    matrix:
+      - TALON_BACKEND: [COMPAT, STD]
+  variables:
+    ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
+    UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+  before_script:
+    - apt-get update
+    - apt-get install -y cmake ninja-build clang-18 libc++-18-dev libc++abi-18-dev
+  script:
+    - >-
+      cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_CXX_COMPILER=clang++-18 -DCMAKE_CXX_FLAGS=-stdlib=libc++
+      -DTALON_STATUS_CXX_STANDARD=23 -DTALON_STATUS_BACKEND="$TALON_BACKEND"
+      -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_SANITIZERS=ON
+    - cmake --build build --parallel 2
+    - ctest --test-dir build --output-on-failure --parallel 2
+
+abseil:
+  stage: test
+  image: gcc:12
+  parallel:
+    matrix:
+      - TALON_CXX_STANDARD: ["17"]
+        TALON_BACKEND: [COMPAT]
+      - TALON_CXX_STANDARD: ["23"]
+        TALON_BACKEND: [STD]
+  before_script:
+    - apt-get update
+    - apt-get install -y cmake ninja-build git ca-certificates
+    - git clone --depth 1 --branch 20250127.1 https://github.com/abseil/abseil-cpp.git external/abseil-cpp
+    - >-
+      cmake -S external/abseil-cpp -B external/abseil-build -G Ninja
+      -DCMAKE_CXX_STANDARD="$TALON_CXX_STANDARD" -DCMAKE_BUILD_TYPE=Release
+      -DABSL_BUILD_TESTING=OFF -DABSL_ENABLE_INSTALL=ON -DABSL_PROPAGATE_CXX_STD=ON
+      -DCMAKE_INSTALL_PREFIX="$CI_PROJECT_DIR/external/abseil-install"
+    - cmake --build external/abseil-build --parallel 2
+    - cmake --install external/abseil-build
+  script:
+    - >-
+      cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_PREFIX_PATH="$CI_PROJECT_DIR/external/abseil-install"
+      -DTALON_STATUS_CXX_STANDARD="$TALON_CXX_STANDARD"
+      -DTALON_STATUS_BACKEND="$TALON_BACKEND"
+      -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_WITH_ABSL=ON
+      -DTALON_STATUS_ABSL_TESTS=ON -DTALON_STATUS_STRICT_WARNINGS=ON
+    - cmake --build build --parallel 2
+    - ctest --test-dir build --output-on-failure --parallel 2
+
+# These two jobs require project-owned shell runners. They stay unscheduled
+# until the owner enables the matching CI variable and supplies the runner tag.
+# Creating this file is not evidence that either platform has passed.
+macos:
+  stage: test
+  tags: [talon-macos]
+  rules:
+    - if: '$TALON_ENABLE_MACOS_RUNNER == "1"'
+  variables:
+    DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+  script:
+    - xcrun clang++ --version
+    - >-
+      cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release
+      -DTALON_STATUS_CXX_STANDARD=23 -DTALON_STATUS_BACKEND=STD
+      -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+      -DTALON_STATUS_BUILD_BENCHMARKS=ON
+      -DTALON_STATUS_STRICT_WARNINGS=ON
+    - cmake --build build --parallel 2
+    - ctest --test-dir build --output-on-failure --parallel 2
+
+windows:
+  stage: test
+  tags: [talon-windows]
+  rules:
+    - if: '$TALON_ENABLE_WINDOWS_RUNNER == "1"'
+  parallel:
+    matrix:
+      - TALON_CXX_STANDARD: ["17"]
+        TALON_BACKEND: [COMPAT]
+      - TALON_CXX_STANDARD: ["23"]
+        TALON_BACKEND: [STD]
+  script:
+    - >-
+      cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      -DTALON_STATUS_CXX_STANDARD="$env:TALON_CXX_STANDARD"
+      -DTALON_STATUS_BACKEND="$env:TALON_BACKEND"
+      -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_BUILD_EXAMPLES=ON
+      -DTALON_STATUS_BUILD_BENCHMARKS=ON
+      -DTALON_STATUS_STRICT_WARNINGS=ON
+    - cmake --build build --config Release --parallel 2
+    - ctest --test-dir build -C Release --output-on-failure --parallel 2

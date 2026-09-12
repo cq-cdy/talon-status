@@ -1,0 +1,10 @@
+/build*/
+/install*/
+/coverage*/
+/external/
+CMakeUserPresets.json
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
