@@ -131,7 +131,6 @@ jobs:
           sudo apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev ninja-build
       - run: >-
           cmake -S . -B build -G Ninja -DCMAKE_CXX_COMPILER=clang++-18
-          -DCMAKE_CXX_FLAGS=-stdlib=libc++
           -DCMAKE_BUILD_TYPE=Debug -DTALON_STATUS_CXX_STANDARD=23
           -DTALON_STATUS_BACKEND=${{ matrix.backend }}
           -DTALON_STATUS_BUILD_TESTS=ON -DTALON_STATUS_SANITIZERS=ON

@@ -77,17 +77,46 @@ struct IsSupportedValue
                     !IsExpectedTag<T>::value &&
                     std::is_nothrow_destructible<T>::value> {};
 
-template <typename T, typename U>
-struct IsValueSource
+template <typename U>
+struct IsRejectedValueSource
     : std::integral_constant<
           bool,
-          !std::is_same<typename std::decay<U>::type, Status>::value &&
-              !std::is_same<typename std::decay<U>::type, in_place_t>::value &&
-              !IsStatusOr<typename std::decay<U>::type>::value &&
-              !IsNativeResultSource<typename std::decay<U>::type>::value &&
-              !std::is_base_of<ErrorReturnTag,
-                               typename std::decay<U>::type>::value &&
-              std::is_constructible<T, U>::value> {};
+          std::is_same<typename std::decay<U>::type, Status>::value ||
+              std::is_same<typename std::decay<U>::type, in_place_t>::value ||
+              IsStatusOr<typename std::decay<U>::type>::value ||
+              IsNativeResultSource<typename std::decay<U>::type>::value ||
+              std::is_base_of<ErrorReturnTag,
+                              typename std::decay<U>::type>::value> {};
+
+// Keep the standard type traits lazy. Some standard libraries recursively
+// inspect converting expected/any constructors even though native result types
+// have already been rejected by Talon's public contract.
+template <typename T, typename U, bool = !IsRejectedValueSource<U>::value>
+struct IsValueSource : std::false_type {};
+template <typename T, typename U>
+struct IsValueSource<T, U, true> : std::is_constructible<T, U> {};
+
+template <typename T, typename U, bool = IsValueSource<T, U>::value>
+struct IsImplicitValueSource : std::false_type {};
+template <typename T, typename U>
+struct IsImplicitValueSource<T, U, true> : std::is_convertible<U, T> {};
+
+template <typename T, typename U, bool = IsValueSource<T, U>::value>
+struct IsExplicitValueSource : std::false_type {};
+template <typename T, typename U>
+struct IsExplicitValueSource<T, U, true>
+    : std::integral_constant<bool, !std::is_convertible<U, T>::value> {};
+
+template <typename T, typename U, bool = IsValueSource<T, U>::value>
+struct IsNothrowValueSource : std::false_type {};
+template <typename T, typename U>
+struct IsNothrowValueSource<T, U, true> : std::is_nothrow_constructible<T, U> {
+};
+
+template <typename T, typename U, bool = IsValueSource<T, U>::value>
+struct IsAssignableValueSource : std::false_type {};
+template <typename T, typename U>
+struct IsAssignableValueSource<T, U, true> : std::is_assignable<T&, U> {};
 
 inline Status CheckError(Status status) {
   if (status.ok()) {
@@ -172,20 +201,18 @@ class StatusOr
             std::forward<Args>(args)...) {
   }
 
-  template <typename U,
-            typename std::enable_if<internal::IsValueSource<T, U&&>::value &&
-                                        std::is_convertible<U&&, T>::value,
-                                    int>::type = 0>
+  template <typename U, typename std::enable_if<
+                            internal::IsImplicitValueSource<T, U&&>::value,
+                            int>::type = 0>
   StatusOr(U&& value)  // Follows the implicitness of U -> T.
-      noexcept(std::is_nothrow_constructible<T, U&&>::value)
+      noexcept(internal::IsNothrowValueSource<T, U&&>::value)
       : StatusOr(in_place, std::forward<U>(value)) {}
 
   template <typename U,
-            typename std::enable_if<internal::IsValueSource<T, U&&>::value &&
-                                        !std::is_convertible<U&&, T>::value,
-                                    int>::type = 0>
+            typename std::enable_if<
+                internal::IsExplicitValueSource<T, U&&>::value, int>::type = 0>
   explicit StatusOr(U&& value) noexcept(
-      std::is_nothrow_constructible<T, U&&>::value)
+      internal::IsNothrowValueSource<T, U&&>::value)
       : StatusOr(in_place, std::forward<U>(value)) {}
 
   template <typename S>
@@ -204,8 +231,7 @@ class StatusOr
   }
 
   template <typename U>
-  typename std::enable_if<internal::IsValueSource<T, U&&>::value &&
-                              std::is_assignable<T&, U&&>::value,
+  typename std::enable_if<internal::IsAssignableValueSource<T, U&&>::value,
                           StatusOr&>::type
   operator=(U&& value) {
 #if TALON_STATUS_USE_STD_EXPECTED

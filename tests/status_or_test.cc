@@ -8,9 +8,6 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#if TALON_STATUS_HAS_STD_EXPECTED
-#include <any>
-#endif
 
 #include "test.h"
 
@@ -75,11 +72,15 @@ struct StatusLike {
   operator talon::Status() const { return talon::InternalError("conversion"); }
 };
 struct alignas(128) OverAligned {
-  explicit OverAligned(int value) : value(value) {}
+  explicit OverAligned(int value)
+      : value(static_cast<std::uint32_t>(value)), alignment_padding() {}
   OverAligned* operator&() { return nullptr; }
   const OverAligned* operator&() const { return nullptr; }
-  int value;
+  std::uint32_t value;
+  unsigned char alignment_padding[124];
 };
+static_assert(sizeof(OverAligned) == 128,
+              "over-aligned test value must not need tail padding");
 
 struct ConstMember {
   explicit ConstMember(int value) : value(value) {}
@@ -220,34 +221,41 @@ static_assert(!std::is_nothrow_move_constructible<StatusOr<Tracked>>::value &&
               "throwing moves must not be declared noexcept");
 
 #if TALON_STATUS_HAS_STD_EXPECTED
+struct GreedyValue {
+  GreedyValue() : converted(false) {}
+  GreedyValue(const GreedyValue&) = default;
+  GreedyValue(GreedyValue&&) = default;
+  GreedyValue& operator=(const GreedyValue&) = default;
+  GreedyValue& operator=(GreedyValue&&) = default;
+  template <typename U>
+  explicit GreedyValue(U&&) : converted(true) {}
+  bool converted;
+};
+
 // Regression: direct native-result assignment must not bypass CheckError via
 // std::expected's unexpected/copy assignment overloads when T accepts anything.
-static_assert(!std::is_constructible<StatusOr<std::any>,
+static_assert(!std::is_constructible<StatusOr<GreedyValue>,
                                      std::unexpected<talon::Status>>::value,
               "native error wrappers are not implicit value sources");
-static_assert(!std::is_assignable<StatusOr<std::any>&,
+static_assert(!std::is_assignable<StatusOr<GreedyValue>&,
                                   std::unexpected<talon::Status>>::value,
               "native errors must not create a failed result with OK status");
-static_assert(
-    !std::is_constructible<StatusOr<std::any>,
-                           std::expected<std::any, talon::Status>>::value,
-    "native expected is not an implicit value source");
-static_assert(
-    !std::is_assignable<StatusOr<std::any>&,
-                        std::expected<std::any, talon::Status>>::value,
-    "native expected assignment must not replace wrapper state");
+static_assert(!std::is_constructible<StatusOr<GreedyValue>,
+                                     std::expected<int, talon::Status>>::value,
+              "native expected is not an implicit value source");
+static_assert(!std::is_assignable<StatusOr<GreedyValue>&,
+                                  std::expected<int, talon::Status>>::value,
+              "native expected assignment must not replace wrapper state");
 
 void TestNativeResultAsExplicitValue() {
   std::unexpected<talon::Status> error(talon::OkStatus());
-  StatusOr<std::any> result(talon::in_place, error);
-  CHECK(result.ok());
-  result = std::any(error);
-  CHECK(result.ok());
-  CHECK(std::any_cast<std::unexpected<talon::Status>>(*result).error().ok());
-  std::expected<std::any, talon::Status> native(std::unexpect,
-                                                talon::OkStatus());
-  result = std::any(native);
-  CHECK(result.ok());
+  StatusOr<GreedyValue> result(talon::in_place, error);
+  CHECK(result.ok() && result->converted);
+  result = GreedyValue(error);
+  CHECK(result.ok() && result->converted);
+  std::expected<int, talon::Status> native(std::unexpect, talon::OkStatus());
+  result = GreedyValue(native);
+  CHECK(result.ok() && result->converted);
   StatusOr<std::expected<int, talon::Status>> nested(talon::in_place, 7);
   CHECK(nested.ok() && nested->has_value());
   CHECK_EQ(nested->value(), 7);

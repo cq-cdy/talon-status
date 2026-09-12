@@ -1,6 +1,21 @@
+<div align="center">
+
 # talon-status
 
-`talon-status` 是面向大型 C++ 工程的错误处理基础库，提供 `talon::Status`、`talon::StatusOr<T>` 以及一组经过严格约束的错误传播宏。
+**面向大型 C++ 工程的可移植、契约驱动错误处理基础库**
+
+[![C++ contracts](https://github.com/cq-cdy/talon-status/actions/workflows/ci.yml/badge.svg)](https://github.com/cq-cdy/talon-status/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)](CMakeLists.txt)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![C++](https://img.shields.io/badge/C%2B%2B-11%20to%2023-00599C.svg?logo=c%2B%2B)](docs/compatibility.md)
+[![CMake](https://img.shields.io/badge/CMake-3.16%2B-064F8C.svg?logo=cmake)](CMakeLists.txt)
+[![Library](https://img.shields.io/badge/library-header--only-success.svg)](include/talon)
+
+`Status` · `StatusOr<T>` · Error propagation macros · Optional Abseil interoperability
+
+</div>
+
+`talon-status` 提供 `talon::Status`、`talon::StatusOr<T>` 以及一组经过严格约束的错误传播宏。
 
 它解决的不只是“如何返回一个错误”，还包括长期工程治理中的几个核心问题：错误语义是否统一，失败路径是否容易审查，资源所有权是否明确，不同语言标准和基础设施能否采用同一套接口，以及公共工具是否会给宿主工程引入隐式依赖、全局构建选项或不可控的控制流。
 
